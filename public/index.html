@@ -97,8 +97,16 @@
         <button id="export-csv" class="primary small" disabled>导出选中 CSV</button>
         <button id="export-zip" class="primary small" disabled>导出选中 ZIP（标注 PNG + CSV）</button>
         <button id="export-single-png" class="small" disabled>导出单份标注 PNG</button>
+        <button id="new-comparison" class="small">📊 新建报告间比较</button>
       </div>
       <div id="report-list" class="item-list"><p class="muted">加载中…</p></div>
+    </div>
+
+    <div class="card">
+      <h2>比较记录</h2>
+      <p class="hint">在两份不同报告间按细胞手动一对一配对；同名细胞不会自动配对。
+        比较只取两份报告冻结的定标与测量值，草稿后续改动或另发报告都不会改变已存记录。</p>
+      <div id="comparison-list" class="item-list"><p class="muted">加载中…</p></div>
     </div>
   </section>
 
@@ -132,11 +140,78 @@
     </div>
   </section>
 
+  <!-- 比较记录：编辑（新建/修改） -->
+  <section id="view-compare-edit" class="view hidden">
+    <div class="card">
+      <div class="side-head" style="margin-bottom:10px">
+        <a href="#/reports" class="back">← 返回报告列表</a>
+        <span id="cmp-edit-tag" class="version-tag"></span>
+      </div>
+      <h2 id="cmp-edit-title">新建报告间比较</h2>
+      <p class="hint">选择两份不同的已发布报告作为基线与复测，再逐行手动配对两侧细胞；同名细胞不会自动配对。</p>
+
+      <div class="cmp-form-row">
+        <label>比较标题
+          <input type="text" id="cmp-title" maxlength="100" placeholder="留空则自动使用两侧报告标题" />
+        </label>
+      </div>
+      <div class="cmp-report-pick">
+        <label>① 基线报告
+          <select id="cmp-baseline"></select>
+        </label>
+        <span class="cmp-vs">⇄</span>
+        <label>② 复测报告
+          <select id="cmp-retest"></select>
+        </label>
+      </div>
+
+      <div id="cmp-calib" class="info"></div>
+
+      <div class="toolbar wrap">
+        <button id="cmp-add-pair" class="small" disabled>+ 添加一对</button>
+        <button id="cmp-save" class="primary small" disabled>保存比较记录</button>
+      </div>
+      <div id="cmp-msg" class="info"></div>
+
+      <div id="cmp-pairs-wrap" class="cmp-pairs"></div>
+
+      <h3 style="font-size:13.5px;color:var(--accent);margin-top:14px">未配对细胞（保存后分别列出）</h3>
+      <div id="cmp-unpaired" class="cmp-unpaired"></div>
+    </div>
+  </section>
+
+  <!-- 比较记录：详情 -->
+  <section id="view-compare-detail" class="view hidden">
+    <div class="card">
+      <div class="side-head" style="margin-bottom:10px">
+        <a href="#/reports" class="back">← 返回报告列表</a>
+      </div>
+      <h2 id="cmpd-title" class="filename" style="margin:6px 0"></h2>
+      <div id="cmpd-meta" class="info"></div>
+      <div class="panel" style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px">
+        <h3>配对细胞比较（差值 = 复测 − 基线；变化率相对基线）</h3>
+        <div id="cmpd-paired-wrap"></div>
+      </div>
+      <div class="panel" style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px">
+        <h3>未配对细胞</h3>
+        <div id="cmpd-unpaired-wrap" class="cmp-unpaired"></div>
+      </div>
+      <div class="panel" style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px">
+        <h3>操作</h3>
+        <div class="toolbar wrap">
+          <a id="cmpd-csv-link" class="btn-like" download>导出比较 CSV（与页面一致）</a>
+          <a id="cmpd-edit-link" class="btn-like">修改比较记录</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <script src="/geometry-client.js"></script>
   <script src="/api.js"></script>
   <script src="/canvas-view.js"></script>
   <script src="/editor.js"></script>
   <script src="/reports.js"></script>
+  <script src="/compare.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

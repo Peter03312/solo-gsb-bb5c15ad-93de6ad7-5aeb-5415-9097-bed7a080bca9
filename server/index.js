@@ -10,7 +10,8 @@ const sharp = require('sharp');
 const { initDb } = require('./db');
 const geo = require('./geometry');
 const { renderAnnotatedPng } = require('./render');
-const { buildReportCsv, buildCombinedCsv, streamZip } = require('./exporter');
+const { buildReportCsv, buildCombinedCsv, buildComparisonCsv, streamZip } = require('./exporter');
+const cmp = require('./comparisons');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const PORT = parseInt(process.env.PORT || '8080', 10);
@@ -372,6 +373,135 @@ app.post('/api/reports/export', async (req, res) => {
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: `导出失败：${e.message}` });
   }
+});
+
+// ---------- 报告间比较 ----------
+
+function getComparisonRow(id) {
+  return db.prepare('SELECT * FROM comparisons WHERE id = ?').get(id);
+}
+
+// 读取比较记录并装配两侧报告；任一报告缺失返回 404 由调用方处理
+function loadComparisonOr404(req, res) {
+  const row = getComparisonRow(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: '比较记录不存在' });
+    return null;
+  }
+  const baseline = getReportOr404(row.baseline_report_id);
+  const retest = getReportOr404(row.retest_report_id);
+  if (!baseline || !retest) {
+    res.status(404).json({ error: '比较记录引用的报告不存在' });
+    return null;
+  }
+  return { row, baseline, retest };
+}
+
+app.get('/api/comparisons', (_req, res) => {
+  const rows = db.prepare('SELECT * FROM comparisons ORDER BY updated_at DESC').all();
+  res.json(rows.map(cmp.hydrateComparison));
+});
+
+// 创建比较记录：先校验两侧报告与全部配对，任何一项失败都不写入
+app.post('/api/comparisons', (req, res) => {
+  const { baselineReportId, retestReportId, title, pairs } = req.body || {};
+  if (typeof baselineReportId !== 'string' || typeof retestReportId !== 'string') {
+    return badRequest(res, '请选择两份报告：baselineReportId 与 retestReportId');
+  }
+  if (baselineReportId === retestReportId) {
+    return badRequest(res, '基线报告与复测报告必须是两份不同的报告，不能与自身比较');
+  }
+  const baseline = getReportOr404(baselineReportId);
+  if (!baseline) return badRequest(res, '基线报告不存在或已被删除');
+  const retest = getReportOr404(retestReportId);
+  if (!retest) return badRequest(res, '复测报告不存在或已被删除');
+
+  let normalized;
+  try {
+    normalized = cmp.normalizePairs(pairs, baseline, retest);
+  } catch (e) {
+    return badRequest(res, e.message);
+  }
+
+  const id = crypto.randomUUID();
+  const finalTitle = (typeof title === 'string' && title.trim())
+    ? title.trim().slice(0, 100)
+    : `比较：${baseline.title} ⇄ ${retest.title}`.slice(0, 100);
+
+  db.prepare(`INSERT INTO comparisons (id, baseline_report_id, retest_report_id, title, pairs)
+              VALUES (?, ?, ?, ?, ?)`)
+    .run(id, baselineReportId, retestReportId, finalTitle, JSON.stringify(normalized));
+
+  const result = cmp.buildResult(
+    cmp.hydrateComparison(getComparisonRow(id)),
+    baseline,
+    retest
+  );
+  res.status(201).json(result);
+});
+
+app.get('/api/comparisons/:id', (req, res) => {
+  const loaded = loadComparisonOr404(req, res);
+  if (!loaded) return;
+  res.json(cmp.buildResult(cmp.hydrateComparison(loaded.row), loaded.baseline, loaded.retest));
+});
+
+// 修改比较记录：乐观并发，必须携带读取时版本；过期拒绝并返回当前版本。
+// 报告、配对全部重新校验，任何一项失败整次修改不生效。
+app.put('/api/comparisons/:id', (req, res) => {
+  const row = getComparisonRow(req.params.id);
+  if (!row) return res.status(404).json({ error: '比较记录不存在' });
+  const current = cmp.hydrateComparison(row);
+  if (!Number.isInteger(req.body.version) || req.body.version !== current.version) {
+    return res.status(409).json({
+      error: `修改被拒绝：比较记录已过期（携带版本 ${req.body.version}，当前版本 ${current.version}）。请重新读取后再修改`,
+      currentVersion: current.version
+    });
+  }
+
+  const baselineReportId = typeof req.body.baselineReportId === 'string'
+    ? req.body.baselineReportId : current.baselineReportId;
+  const retestReportId = typeof req.body.retestReportId === 'string'
+    ? req.body.retestReportId : current.retestReportId;
+  if (baselineReportId === retestReportId) {
+    return badRequest(res, '基线报告与复测报告必须是两份不同的报告，不能与自身比较');
+  }
+  const baseline = getReportOr404(baselineReportId);
+  if (!baseline) return badRequest(res, '基线报告不存在或已被删除');
+  const retest = getReportOr404(retestReportId);
+  if (!retest) return badRequest(res, '复测报告不存在或已被删除');
+
+  let normalized;
+  try {
+    normalized = cmp.normalizePairs(
+      req.body.pairs === undefined ? current.pairs : req.body.pairs,
+      baseline,
+      retest
+    );
+  } catch (e) {
+    return badRequest(res, e.message);
+  }
+
+  const finalTitle = (typeof req.body.title === 'string' && req.body.title.trim())
+    ? req.body.title.trim().slice(0, 100)
+    : current.title;
+
+  db.prepare(`UPDATE comparisons SET baseline_report_id = ?, retest_report_id = ?,
+                title = ?, pairs = ?, version = version + 1, updated_at = datetime('now')
+              WHERE id = ?`)
+    .run(baselineReportId, retestReportId, finalTitle, JSON.stringify(normalized), current.id);
+
+  const freshRow = getComparisonRow(current.id);
+  res.json(cmp.buildResult(cmp.hydrateComparison(freshRow), baseline, retest));
+});
+
+app.get('/api/comparisons/:id/csv', (req, res) => {
+  const loaded = loadComparisonOr404(req, res);
+  if (!loaded) return;
+  const result = cmp.buildResult(cmp.hydrateComparison(loaded.row), loaded.baseline, loaded.retest);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${loaded.row.id}_comparison.csv"`);
+  res.send(buildComparisonCsv(result));
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ error: '接口不存在' }));

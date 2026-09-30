@@ -42,6 +42,21 @@ function initDb(dataDir) {
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
     );
+
+    -- 报告间比较记录：只保存两份不可变报告与手动指定的细胞配对，
+    -- 比较数值始终从两份报告冻结的定标/测量值实时计算。
+    CREATE TABLE IF NOT EXISTS comparisons (
+      id                 TEXT PRIMARY KEY,
+      baseline_report_id TEXT NOT NULL,
+      retest_report_id   TEXT NOT NULL,
+      title              TEXT NOT NULL,
+      pairs              TEXT NOT NULL DEFAULT '[]', -- JSON: [{baseCellId, retestCellId}]
+      version            INTEGER NOT NULL DEFAULT 1, -- 比较记录版本，每次修改 +1
+      created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (baseline_report_id) REFERENCES reports(id) ON DELETE RESTRICT,
+      FOREIGN KEY (retest_report_id) REFERENCES reports(id) ON DELETE RESTRICT
+    );
   `);
 
   return db;

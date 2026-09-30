@@ -62,6 +62,11 @@ const Reports = {
     }
     this.selected = new Set([...this.selected].filter((id) => this.reports.some((r) => r.id === id)));
     this.updateExportButtons();
+
+    if (window.Compare) {
+      Compare.reports = this.reports;
+      Compare.showSavedList();
+    }
   },
 
   selectedIds() { return [...this.selected]; },

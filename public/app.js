@@ -3,14 +3,16 @@
 // 简易 hash 路由 + 首页
 
 const App = {
-  views: ['view-home', 'view-editor', 'view-reports', 'view-report-detail'],
+  views: ['view-home', 'view-editor', 'view-reports', 'view-report-detail',
+    'view-compare-edit', 'view-compare-detail'],
 
   show(id) {
     for (const v of this.views) document.getElementById(v).classList.toggle('hidden', v !== id);
     document.querySelectorAll('nav a').forEach((a) => {
       a.classList.toggle('active',
         (id === 'view-home' && a.dataset.nav === 'home') ||
-        ((id === 'view-reports' || id === 'view-report-detail') && a.dataset.nav === 'reports'));
+        ((id === 'view-reports' || id === 'view-report-detail' ||
+          id === 'view-compare-edit' || id === 'view-compare-detail') && a.dataset.nav === 'reports'));
     });
   },
 
@@ -85,6 +87,18 @@ const App = {
         alert(e.message);
         location.hash = '#/reports';
       }
+    } else if (page === 'comparison' && parts[1] && parts[2] === 'edit') {
+      this.show('view-compare-edit');
+      window.scrollTo(0, 0);
+      await Compare.openEdit(parts[1]);
+    } else if (page === 'comparison' && parts[1]) {
+      this.show('view-compare-detail');
+      window.scrollTo(0, 0);
+      await Compare.showDetail(parts[1]);
+    } else if (page === 'comparison-new') {
+      this.show('view-compare-edit');
+      window.scrollTo(0, 0);
+      await Compare.openCreate();
     } else if (page === 'reports') {
       Reports.hideDetail();
       this.show('view-reports');
@@ -126,6 +140,13 @@ const App = {
     document.getElementById('export-zip').onclick = () => {
       Reports.downloadBlob('/api/reports/export', { ids: Reports.selectedIds(), format: 'zip' }, 'reports.zip');
     };
+
+    document.getElementById('new-comparison').onclick = () => { location.hash = '#/comparison-new'; };
+    document.getElementById('cmp-add-pair').onclick = () => {
+      Compare.draftPairs.push({ baseCellId: null, retestCellId: null });
+      Compare.renderPairEditor();
+    };
+    document.getElementById('cmp-save').onclick = () => Compare.save();
 
     window.addEventListener('keydown', (e) => Editor.onKey(e));
     window.addEventListener('hashchange', () => this.route());

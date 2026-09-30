@@ -89,4 +89,50 @@ async function streamZip(reports, pngByName, res) {
   await archive.finalize();
 }
 
-module.exports = { buildReportCsv, buildCombinedCsv, streamZip };
+// 报告间比较 CSV：列顺序与页面一致，基线值为零时变化率写“不可计算”，未配对细胞单列成行
+function buildComparisonCsv(result) {
+  const head = [
+    '比较ID', '比较标题', '保存时间', '比较记录版本',
+    '基线报告ID', '基线报告标题', '复测报告ID', '复测报告标题',
+    '类别', '基线细胞', '复测细胞',
+    '基线净面积(μm²)', '复测净面积(μm²)', '净面积差值(μm²)', '净面积变化率',
+    '基线总周长(μm)', '复测总周长(μm)', '总周长差值(μm)', '总周长变化率'
+  ];
+  const rows = [head];
+
+  const fixed = [
+    result.id, result.title, result.updatedAt, result.version,
+    result.baseline.reportId, result.baseline.title,
+    result.retest.reportId, result.retest.title
+  ];
+  const rateText = (v) => (v === null ? '不可计算' : `${v > 0 ? '+' : ''}${v}%`);
+
+  for (const p of result.paired) {
+    rows.push([
+      ...fixed,
+      '配对', p.baseName, p.retestName,
+      p.baseAreaUm2, p.retestAreaUm2, p.areaDelta, rateText(p.areaRate),
+      p.basePerimeterUm, p.retestPerimeterUm, p.perimeterDelta, rateText(p.perimeterRate)
+    ]);
+  }
+  for (const c of result.unpairedBaseline) {
+    rows.push([
+      ...fixed,
+      '基线未配对', c.name, '',
+      c.areaUm2, '', '', '',
+      c.perimeterUm, '', '', ''
+    ]);
+  }
+  for (const c of result.unpairedRetest) {
+    rows.push([
+      ...fixed,
+      '复测未配对', '', c.name,
+      '', c.areaUm2, '', '',
+      '', c.perimeterUm, '', ''
+    ]);
+  }
+
+  return '﻿' + rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+}
+
+module.exports = { buildReportCsv, buildCombinedCsv, buildComparisonCsv, streamZip };
