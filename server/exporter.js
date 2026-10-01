@@ -89,4 +89,60 @@ async function streamZip(reports, pngByName, res) {
   await archive.finalize();
 }
 
-module.exports = { buildReportCsv, buildCombinedCsv, streamZip };
+// 比较记录 CSV：与页面结构一致——两侧定标信息、配对细胞（两侧数值/带符号差值/相对基线变化率）、
+// 基线未配对、复测未配对。基线值为 0 时变化率列写「不可计算」。
+function buildComparisonCsv(view) {
+  const rows = [];
+  const push = (r) => rows.push(r);
+
+  push(['比较记录ID', view.id, '比较记录标题', view.title, '比较记录版本', `v${view.version}`]);
+  push(['创建时间', view.createdAt, '最后修改时间', view.updatedAt, '', '']);
+  push([]);
+
+  push(['侧别', '报告ID', '报告标题', '图片文件名', '图片宽(px)', '图片高(px)',
+        '发布时草稿版本', '发布时间', '标定距离(μm)', '每像素微米(μm/px)', '细胞数']);
+  for (const s of [view.baseline, view.retest]) {
+    const c = s.calib || {};
+    push([
+      s.side === 'baseline' ? '基线' : '复测',
+      s.reportId, s.title, s.filename, s.width, s.height,
+      `v${s.draftVersion}`, s.createdAt,
+      c.distanceUm ?? '', s.scaleText, s.cellCount
+    ]);
+  }
+  push([]);
+
+  push(['配对细胞']);
+  push(['序号', '基线细胞', '基线孔洞数', '复测细胞', '复测孔洞数',
+        '基线净面积(μm²)', '复测净面积(μm²)', '净面积差值(μm²)', '净面积相对基线变化率',
+        '基线总周长(μm)', '复测总周长(μm)', '总周长差值(μm)', '总周长相对基线变化率']);
+  if (!view.paired.length) {
+    push(['（无配对细胞）']);
+  }
+  view.paired.forEach((p, i) => {
+    push([
+      i + 1,
+      p.baselineName, p.holesBaseline, p.retestName, p.holesRetest,
+      p.metrics.area.baselineText, p.metrics.area.retestText,
+      p.metrics.area.deltaText, p.metrics.area.rateText,
+      p.metrics.perimeter.baselineText, p.metrics.perimeter.retestText,
+      p.metrics.perimeter.deltaText, p.metrics.perimeter.rateText
+    ]);
+  });
+  push([]);
+
+  push(['基线侧未配对细胞']);
+  push(['细胞', '孔洞数', '净面积(μm²)', '总周长(μm)']);
+  if (!view.unpairedBaseline.length) push(['（无）']);
+  view.unpairedBaseline.forEach((c) => push([c.name, c.holes, c.areaText, c.perimeterText]));
+  push([]);
+
+  push(['复测侧未配对细胞']);
+  push(['细胞', '孔洞数', '净面积(μm²)', '总周长(μm)']);
+  if (!view.unpairedRetest.length) push(['（无）']);
+  view.unpairedRetest.forEach((c) => push([c.name, c.holes, c.areaText, c.perimeterText]));
+
+  return '﻿' + rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+}
+
+module.exports = { buildReportCsv, buildCombinedCsv, buildComparisonCsv, streamZip };

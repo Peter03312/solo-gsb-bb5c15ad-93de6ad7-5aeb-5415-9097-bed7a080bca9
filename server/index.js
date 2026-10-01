@@ -9,8 +9,9 @@ const sharp = require('sharp');
 
 const { initDb } = require('./db');
 const geo = require('./geometry');
+const cmp = require('./compare');
 const { renderAnnotatedPng } = require('./render');
-const { buildReportCsv, buildCombinedCsv, streamZip } = require('./exporter');
+const { buildReportCsv, buildCombinedCsv, buildComparisonCsv, streamZip } = require('./exporter');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const PORT = parseInt(process.env.PORT || '8080', 10);
@@ -372,6 +373,148 @@ app.post('/api/reports/export', async (req, res) => {
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: `导出失败：${e.message}` });
   }
+});
+
+// ---------- 报告比较（两份不同报告的冻结数据，手动一对一配对） ----------
+
+function hydrateComparisonRow(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    baselineReportId: row.baseline_report_id,
+    retestReportId: row.retest_report_id,
+    pairs: JSON.parse(row.pairs),
+    version: row.version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function getComparisonOr404(id) {
+  const row = db.prepare('SELECT * FROM comparisons WHERE id = ?').get(id);
+  return row ? hydrateComparisonRow(row) : null;
+}
+
+// 组装比较结果视图；记录引用的报告若已被删除则返回 null
+function getComparisonViewOr404(id) {
+  const record = getComparisonOr404(id);
+  if (!record) return null;
+  const baseline = getReportOr404(record.baselineReportId);
+  const retest = getReportOr404(record.retestReportId);
+  if (!baseline || !retest) return { missing: true, record };
+  return cmp.buildComparisonView(record, baseline, retest);
+}
+
+app.get('/api/comparisons', (_req, res) => {
+  const rows = db.prepare('SELECT * FROM comparisons ORDER BY created_at DESC').all();
+  res.json(rows.map((r) => cmp.summarizeRecord(hydrateComparisonRow(r))));
+});
+
+// 读取两报告并校验：报告存在、两侧不同、配对合法。任一不满足返回 {error, status}
+function resolveComparisonInput(body) {
+  const baselineId = body && body.baselineReportId;
+  const retestId = body && body.retestReportId;
+  if (typeof baselineId !== 'string' || !baselineId ||
+      typeof retestId !== 'string' || !retestId) {
+    return { error: '请分别选择基线报告 baselineReportId 与复测报告 retestReportId', status: 400 };
+  }
+  const baseline = getReportOr404(baselineId);
+  if (!baseline) return { error: `基线报告 ${baselineId} 不存在`, status: 400 };
+  const retest = getReportOr404(retestId);
+  if (!retest) return { error: `复测报告 ${retestId} 不存在`, status: 400 };
+  if (baselineId === retestId) return { error: '基线与复测必须选择两份不同的报告，整次保存未生效', status: 400 };
+
+  let checked;
+  try {
+    checked = cmp.validatePairing(body.pairs, baseline, retest);
+  } catch (e) {
+    return { error: `${e.message}，整次保存未生效`, status: 400 };
+  }
+  return { baseline, retest, pairs: checked.pairs };
+}
+
+function comparisonTitle(input, baseline, retest) {
+  const t = typeof input === 'string' ? input.trim() : '';
+  if (t) return t.slice(0, 100);
+  return `比较：${baseline.title} ↔ ${retest.title}`.slice(0, 100);
+}
+
+app.post('/api/comparisons', (req, res) => {
+  const input = resolveComparisonInput(req.body || {});
+  if (input.error) return res.status(input.status).json({ error: input.error });
+  const { baseline, retest, pairs } = input;
+
+  const id = crypto.randomUUID();
+  const title = comparisonTitle(req.body.title, baseline, retest);
+  // 全部校验通过后才写库：报告不存在/两侧相同/配对重复/细胞不存在时不会有任何写入
+  db.prepare(`INSERT INTO comparisons
+              (id, title, baseline_report_id, retest_report_id, pairs)
+              VALUES (?, ?, ?, ?, ?)`)
+    .run(id, title, baseline.id, retest.id, JSON.stringify(pairs));
+
+  const view = cmp.buildComparisonView(getComparisonOr404(id), baseline, retest);
+  res.status(201).json(view);
+});
+
+app.get('/api/comparisons/:id', (req, res) => {
+  const view = getComparisonViewOr404(req.params.id);
+  if (!view) return res.status(404).json({ error: '比较记录不存在' });
+  if (view.missing) {
+    return res.status(410).json({ error: '该比较记录引用的基线或复测报告已被删除，无法重建比较结果' });
+  }
+  res.json(view);
+});
+
+// 修改比较记录：必须携带读取时版本；过期返回 409 与当前版本，整次修改不生效
+app.put('/api/comparisons/:id', (req, res) => {
+  const record = getComparisonOr404(req.params.id);
+  if (!record) return res.status(404).json({ error: '比较记录不存在' });
+
+  const version = req.body && req.body.version;
+  if (!Number.isInteger(version)) {
+    return badRequest(res, '修改比较记录必须携带读取时版本号 version');
+  }
+  if (version !== record.version) {
+    return res.status(409).json({
+      error: `比较记录已过期：你携带的版本为 v${version}，当前版本为 v${record.version}，请重新读取后再修改`,
+      currentVersion: record.version
+    });
+  }
+
+  // 两侧报告沿用创建时选择的报告；只允许改标题与配对
+  const baseline = getReportOr404(record.baselineReportId);
+  const retest = getReportOr404(record.retestReportId);
+  if (!baseline || !retest) {
+    return res.status(410).json({ error: '该比较记录引用的基线或复测报告已被删除，无法修改' });
+  }
+
+  let checked;
+  try {
+    checked = cmp.validatePairing(req.body && req.body.pairs, baseline, retest);
+  } catch (e) {
+    return badRequest(res, `${e.message}，整次修改未生效`);
+  }
+
+  const title = (req.body && typeof req.body.title === 'string' && req.body.title.trim())
+    ? req.body.title.trim().slice(0, 100)
+    : record.title;
+
+  db.prepare(`UPDATE comparisons SET title = ?, pairs = ?, version = version + 1,
+              updated_at = datetime('now') WHERE id = ? AND version = ?`)
+    .run(title, JSON.stringify(checked.pairs), record.id, record.version);
+
+  res.json(cmp.buildComparisonView(getComparisonOr404(record.id), baseline, retest));
+});
+
+app.get('/api/comparisons/:id/csv', (req, res) => {
+  const view = getComparisonViewOr404(req.params.id);
+  if (!view) return res.status(404).json({ error: '比较记录不存在' });
+  if (view.missing) {
+    return res.status(410).json({ error: '该比较记录引用的基线或复测报告已被删除，无法导出' });
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${view.id}_comparison.csv"`);
+  res.send(buildComparisonCsv(view));
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ error: '接口不存在' }));

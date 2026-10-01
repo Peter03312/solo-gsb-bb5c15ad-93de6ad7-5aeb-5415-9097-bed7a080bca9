@@ -155,3 +155,61 @@ table.measure tr:nth-child(even) td { background: rgba(255,255,255,.02); }
 /* 复选框列表项 */
 .item label.main { display: flex; align-items: center; gap: 14px; flex: 1; cursor: pointer; min-width: 0; }
 .item input[type=checkbox] { transform: scale(1.25); }
+
+/* 报告比较 */
+.cmp-head { display: flex; justify-content: space-between; align-items: center; }
+.cmp-form-row { margin: 10px 0; }
+.cmp-form-row label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); }
+.cmp-form-row input[type=text] {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 8px 10px; font: inherit; max-width: 520px;
+}
+.cmp-form-row input[type=text]:focus { outline: none; border-color: var(--accent); }
+.cmp-pick-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin: 10px 0 4px; }
+.cmp-pick-row label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--muted); }
+.cmp-pick-row select {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 9px; font: inherit; min-width: 280px; max-width: 420px;
+}
+.cmp-fixed { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.cmp-tag {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+  border: 1px solid var(--line); margin-right: 4px;
+}
+.cmp-tag.base { color: #7fb2ff; border-color: #3a5f93; }
+.cmp-tag.retest { color: var(--accent); border-color: var(--accent); }
+.cmp-error {
+  border: 1px solid var(--danger); color: #ffd9d9; background: rgba(255,93,93,.08);
+  border-radius: 8px; padding: 9px 13px; font-size: 13px; margin: 10px 0;
+}
+
+.cmp-pools { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0; }
+.cmp-pool {
+  border: 1px dashed var(--line); border-radius: 8px; padding: 10px;
+  background: rgba(255,255,255,.015); min-height: 70px;
+}
+.cmp-pool h4 { margin: 0 0 8px; font-size: 13px; }
+.cmp-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; text-align: left; margin-bottom: 7px; padding: 7px 10px;
+  background: var(--panel); border: 1px solid var(--line);
+}
+.cmp-chip .cmp-chip-name { font-weight: 600; }
+.cmp-chip .cmp-chip-vals { font-size: 11.5px; color: var(--muted); }
+.cmp-chip:hover { border-color: var(--accent); }
+.cmp-chip.selected { border-color: var(--accent); background: var(--accent2); }
+
+.table-scroll { overflow-x: auto; }
+table.cmp-table { font-size: 11.5px; white-space: nowrap; }
+table.cmp-table td.cellname, table.cmp-table th:nth-child(2), table.cmp-table th:nth-child(3) {
+  text-align: left; white-space: normal; min-width: 70px;
+}
+table.cmp-table td.num { text-align: right; }
+.rate-up { color: #ff8f8f; }
+.rate-down { color: #8fd8a8; }
+.rate-flat { color: var(--muted); }
+.rate-nc { color: var(--warn); font-weight: 600; }
+
+@media (max-width: 720px) {
+  .cmp-pools { grid-template-columns: 1fr; }
+}

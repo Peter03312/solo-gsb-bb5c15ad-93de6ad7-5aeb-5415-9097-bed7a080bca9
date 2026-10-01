@@ -3,14 +3,16 @@
 // 简易 hash 路由 + 首页
 
 const App = {
-  views: ['view-home', 'view-editor', 'view-reports', 'view-report-detail'],
+  views: ['view-home', 'view-editor', 'view-reports', 'view-report-detail',
+          'view-comparisons', 'view-compare-editor'],
 
   show(id) {
     for (const v of this.views) document.getElementById(v).classList.toggle('hidden', v !== id);
     document.querySelectorAll('nav a').forEach((a) => {
       a.classList.toggle('active',
         (id === 'view-home' && a.dataset.nav === 'home') ||
-        ((id === 'view-reports' || id === 'view-report-detail') && a.dataset.nav === 'reports'));
+        ((id === 'view-reports' || id === 'view-report-detail') && a.dataset.nav === 'reports') ||
+        ((id === 'view-comparisons' || id === 'view-compare-editor') && a.dataset.nav === 'comparisons'));
     });
   },
 
@@ -85,6 +87,23 @@ const App = {
         alert(e.message);
         location.hash = '#/reports';
       }
+    } else if (page === 'compare') {
+      this.show('view-compare-editor');
+      window.scrollTo(0, 0);
+      try {
+        if (parts[1] === 'new' || !parts[1]) {
+          await Compare.openNew();
+        } else {
+          await Compare.openEdit(parts[1]);
+        }
+      } catch (e) {
+        alert(e.message);
+        location.hash = '#/comparisons';
+      }
+    } else if (page === 'comparisons') {
+      this.show('view-comparisons');
+      window.scrollTo(0, 0);
+      await Compare.showList();
     } else if (page === 'reports') {
       Reports.hideDetail();
       this.show('view-reports');
@@ -99,6 +118,9 @@ const App = {
 
   init() {
     Editor.bindUI();
+
+    document.getElementById('cmp-load').onclick = () => Compare.loadPickedReports();
+    document.getElementById('cmp-save').onclick = () => Compare.save();
 
     document.getElementById('upload-form').addEventListener('submit', async (e) => {
       e.preventDefault();

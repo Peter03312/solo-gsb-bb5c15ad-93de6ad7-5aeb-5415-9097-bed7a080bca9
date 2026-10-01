@@ -12,6 +12,7 @@
     <nav>
       <a href="#/" data-nav="home">草稿与图片</a>
       <a href="#/reports" data-nav="reports">已发布报告</a>
+      <a href="#/comparisons" data-nav="comparisons">报告比较</a>
     </nav>
   </header>
 
@@ -97,8 +98,62 @@
         <button id="export-csv" class="primary small" disabled>导出选中 CSV</button>
         <button id="export-zip" class="primary small" disabled>导出选中 ZIP（标注 PNG + CSV）</button>
         <button id="export-single-png" class="small" disabled>导出单份标注 PNG</button>
+        <a href="#/compare/new" class="btn-like small" style="margin-left:auto">＋ 新建报告比较</a>
       </div>
       <div id="report-list" class="item-list"><p class="muted">加载中…</p></div>
+    </div>
+  </section>
+
+  <!-- 报告比较列表 -->
+  <section id="view-comparisons" class="view hidden">
+    <div class="card">
+      <h2>报告比较</h2>
+      <div class="toolbar wrap">
+        <a href="#/compare/new" class="btn-like small primary" id="comparison-new">＋ 新建报告比较</a>
+      </div>
+      <p class="hint">选择两份<b>不同</b>的已发布报告作为基线与复测，按两侧细胞<b>手动</b>建立一对一配对
+        （同名细胞不会自动配对）。比较只取两份报告冻结的定标与测量值，草稿后续改动或另发报告都不影响已存比较。</p>
+      <div id="comparison-list" class="item-list"><p class="muted">加载中…</p></div>
+    </div>
+  </section>
+
+  <!-- 比较编辑器 -->
+  <section id="view-compare-editor" class="view hidden">
+    <div class="card">
+      <div class="cmp-head">
+        <a href="#/comparisons" class="back">← 返回比较列表</a>
+        <span id="cmp-version" class="version-tag">尚未保存</span>
+      </div>
+      <h2 id="cmp-heading">新建报告比较</h2>
+
+      <div id="cmp-error" class="cmp-error hidden"></div>
+
+      <div class="cmp-form-row">
+        <label>比较记录标题（留空则自动生成）
+          <input type="text" id="cmp-title" maxlength="100" placeholder="例如：同一批切片 5 月 ↔ 9 月复测" />
+        </label>
+      </div>
+
+      <div id="cmp-picker-new">
+        <div class="cmp-pick-row">
+          <label>基线报告
+            <select id="cmp-pick-baseline"></select>
+          </label>
+          <label>复测报告
+            <select id="cmp-pick-retest"></select>
+          </label>
+          <button id="cmp-load" class="small">载入两侧细胞</button>
+        </div>
+        <p class="hint">选择两份<b>不同</b>的已发布报告。比较只读取报告冻结的定标与测量值，草稿后续改动或另发报告都不会影响已保存的比较。</p>
+      </div>
+      <div id="cmp-picker-fixed" class="hidden"></div>
+
+      <div class="toolbar wrap">
+        <button id="cmp-save" class="primary small">保存比较记录</button>
+        <a id="cmp-csv" class="btn-like small hidden" target="_blank">导出比较 CSV</a>
+      </div>
+
+      <div id="cmp-workspace"></div>
     </div>
   </section>
 
@@ -137,6 +192,7 @@
   <script src="/canvas-view.js"></script>
   <script src="/editor.js"></script>
   <script src="/reports.js"></script>
+  <script src="/compare.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

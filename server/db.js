@@ -42,6 +42,19 @@ function initDb(dataDir) {
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS comparisons (
+      id                TEXT PRIMARY KEY,
+      title             TEXT NOT NULL,
+      baseline_report_id TEXT NOT NULL,      -- 基线报告
+      retest_report_id  TEXT NOT NULL,       -- 复测报告（必须与基线不同）
+      pairs             TEXT NOT NULL DEFAULT '[]', -- JSON: [{baselineCellKey, retestCellKey}]，手动一对一
+      version           INTEGER NOT NULL DEFAULT 1, -- 比较记录版本，修改时乐观并发
+      created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (baseline_report_id) REFERENCES reports(id) ON DELETE CASCADE,
+      FOREIGN KEY (retest_report_id) REFERENCES reports(id) ON DELETE CASCADE
+    );
   `);
 
   return db;

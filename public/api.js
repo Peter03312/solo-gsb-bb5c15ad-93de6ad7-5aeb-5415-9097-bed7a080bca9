@@ -52,7 +52,30 @@ const API = {
     return jsonOrThrow(await fetch(`/api/reports/${id}`));
   },
   exportCsvUrl(id) { return `/api/reports/${id}/csv`; },
-  exportPngUrl(id) { return `/api/reports/${id}/png`; }
+  exportPngUrl(id) { return `/api/reports/${id}/png`; },
+
+  // ---------- 报告比较 ----------
+  async listComparisons() {
+    return jsonOrThrow(await fetch('/api/comparisons'));
+  },
+  async getComparison(id) {
+    return jsonOrThrow(await fetch(`/api/comparisons/${id}`));
+  },
+  async createComparison(payload) {
+    return jsonOrThrow(await fetch('/api/comparisons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }));
+  },
+  async updateComparison(id, payload) {
+    return jsonOrThrow(await fetch(`/api/comparisons/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }));
+  },
+  comparisonCsvUrl(id) { return `/api/comparisons/${id}/csv`; }
 };
 
 window.API = API;
